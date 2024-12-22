@@ -30,13 +30,10 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 {
     // TODO: insert actual code here!
     float r = DepthTexture[id.xy].x;
-    
     if (r < 0.01)
-    {
         r = 0.01;
-    }
     
-    PositionResult[id.x + id.y * width] = Texture2XYZ(id, 1/r*10);
+    PositionResult[id.x + id.y * width] = Texture2XYZ(id, 1/r*100);
     ColorResult[id.x + id.y * width] = DiffuseTexture[id.xy];
 
 
