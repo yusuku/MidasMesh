@@ -8,45 +8,43 @@ using UnityEngineInternal;
 
 public class DepthMeshIndirect : MonoBehaviour
 {
-    public Texture2D inputTexture;
+    public RenderTexture inputTexture;
 
-    //Depth Estimation
+    //Midas
     public ModelAsset modelAsset;
+    //Meshinstance
+    public Material Instancematerial;
+    public Mesh Instancemesh;
+    public ComputeShader InstanceShader;
 
-    public Material material;
-    public RenderTexture Depthmap;
-
-    //GPUInstancing
-
-    public Material InstanceMaterial;
-    public Mesh InstanceMesh;
-    public ComputeShader InstanceCS;
+    public Material Debugmat;
 
     MidasEstimation midas;
-    TextureDepthGPUInstancing textureDepthGPUInstancing;
+    RenderTexture outputTexture;
+    TextureDepthGPUInstancing GPUInstancing;
+    //GPUInstancing
+
     void Start()
     {
-        midas = new MidasEstimation(modelAsset);
-        Depthmap = midas.inference(inputTexture);
-        material.mainTexture = Depthmap;
-        textureDepthGPUInstancing = new TextureDepthGPUInstancing(InstanceMaterial,InstanceMesh,InstanceCS, inputTexture);
+        midas = new MidasEstimation(modelAsset,Debugmat);
+        outputTexture= midas.inference(inputTexture);
+        
+        GPUInstancing = new TextureDepthGPUInstancing(Instancematerial, Instancemesh, InstanceShader, inputTexture, outputTexture);
+
     }
 
     void Update()
     {
-        
-        textureDepthGPUInstancing.DrawMeshes(Depthmap);
+        outputTexture = midas.inference(inputTexture);
+
+        GPUInstancing.DrawMeshes(outputTexture);
     }
     void OnDestroy()
     {
+        GPUInstancing.Release();
         midas.Release();
-        textureDepthGPUInstancing.Release();
     }
-
-
-
 }
-
 
 public class TextureDepthGPUInstancing
 {
@@ -54,7 +52,8 @@ public class TextureDepthGPUInstancing
     private readonly Mesh mesh; // 描画に使用するメッシュ
     private readonly ComputeShader computeShader;
 
-    private readonly Texture2D diffuseMap; // 入力拡散テクスチャ
+    private readonly RenderTexture diffuseMap; // 入力拡散テクスチャ
+    private RenderTexture Depthmap;
 
     private GraphicsBuffer commandBuf;
     private GraphicsBuffer.IndirectDrawIndexedArgs[] commandData;
@@ -68,13 +67,13 @@ public class TextureDepthGPUInstancing
     private readonly uint xThread;
     private readonly uint yThread;
 
-    public TextureDepthGPUInstancing(Material material, Mesh mesh, ComputeShader computeShader, Texture2D diffuseMap)
+    public TextureDepthGPUInstancing(Material material, Mesh mesh, ComputeShader computeShader, RenderTexture diffuseMap,RenderTexture Depthmap)
     {
         this.material = material ;
         this.mesh = mesh;
         this.computeShader = computeShader;
         this.diffuseMap = diffuseMap;
-
+        this.Depthmap = Depthmap;
 
         this.width = diffuseMap.width;
         this.height = diffuseMap.height;
@@ -101,18 +100,20 @@ public class TextureDepthGPUInstancing
         computeShader.SetInt("height", height);
         computeShader.GetKernelThreadGroupSizes(kernelId, out xThread, out yThread, out _);
         computeShader.SetTexture(kernelId, "DiffuseTexture", diffuseMap);
+        computeShader.SetTexture(kernelId, "DepthTexture", Depthmap);
         computeShader.SetBuffer(kernelId, "PositionResult", positionBuffer);
         computeShader.SetBuffer(kernelId, "ColorResult", colorBuffer);
+        computeShader.Dispatch(kernelId, Mathf.CeilToInt(width / (float)xThread), Mathf.CeilToInt(height / (float)yThread), 1);
+
     }
 
     public void DrawMeshes(RenderTexture depthmap)
     {
         try
         {
-            computeShader.SetTexture(kernelId, "DepthTexture", depthmap);
-            // Compute Shader のディスパッチ
+            this.Depthmap = depthmap;
+            computeShader.SetTexture(kernelId, "DepthTexture", Depthmap);
             computeShader.Dispatch(kernelId, Mathf.CeilToInt(width / (float)xThread), Mathf.CeilToInt(height / (float)yThread), 1);
-
             // 描画のパラメータを設定
             RenderParams renderParams = new RenderParams(material)
             {
