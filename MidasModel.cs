@@ -5,28 +5,28 @@ using UnityEngine.Profiling;
 
 public class MidasModel : MonoBehaviour
 {
-    // ƒ‚ƒfƒ‹‚ÆƒeƒNƒXƒ`ƒƒ‚ÌŠÖ˜AƒŠƒ\[ƒX
+    // ãƒ¢ãƒ‡ãƒ«ã¨ãƒ†ã‚¯ã‚¹ãƒãƒ£ã®é–¢é€£ãƒªã‚½ãƒ¼ã‚¹
     public ModelAsset modelAsset;
-    public Texture2D inputtex;
+    public RenderTexture inputtex;
     public RenderTexture outputTexture;
-    public Material mat;
+    public Material Debugmat;
 
-
+    MidasEstimation midas;
    
         
     void Start()
     {
-       
+       midas=new MidasEstimation(modelAsset,Debugmat);
     }
 
     void Update()
     {
-
+        midas.inference(inputTexture);
     }
 
     void OnDisable()
     {
-  
+        midas.Release();
     }
 
     
@@ -48,27 +48,27 @@ public class MidasEstimation
 
     public RenderTexture inference(RenderTexture inputTexture)
     {
-        RenderTexture outputRendertexture = null; // ‰Šú‰»
+        RenderTexture outputRendertexture = null; // åˆæœŸåŒ–
         try
         {
             Profiler.BeginSample("This is Midas Process");
 
-            // “ü—ÍƒeƒNƒXƒ`ƒƒ‚ğ Tensor ‚É•ÏŠ·
+            // å…¥åŠ›ãƒ†ã‚¯ã‚¹ãƒãƒ£ã‚’ Tensor ã«å¤‰æ›
             using (Tensor<float> inputTensor = TextureConverter.ToTensor(inputTexture, width: 1024, height: 512, channels: 3))
             {
-                // ƒ‚ƒfƒ‹„˜_‚ÌƒXƒPƒWƒ…[ƒŠƒ“ƒO
+                // ãƒ¢ãƒ‡ãƒ«æ¨è«–ã®ã‚¹ã‚±ã‚¸ãƒ¥ãƒ¼ãƒªãƒ³ã‚°
                 m_Worker.Schedule(inputTensor);
 
-                // ƒ‚ƒfƒ‹o—Í‚ğæ“¾
+                // ãƒ¢ãƒ‡ãƒ«å‡ºåŠ›ã‚’å–å¾—
                 using (Tensor<float> outputTensor = m_Worker.PeekOutput() as Tensor<float>)
                 {
                     if (outputTensor != null)
                     {
-                        // •K—v‚É‰‚¶‚Ä Tensor ‚ÌŒ`ó‚ğ•ÏX
+                        // å¿…è¦ã«å¿œã˜ã¦ Tensor ã®å½¢çŠ¶ã‚’å¤‰æ›´
                         
                         Debug.Log($"Output Tensor Shape: {outputTensor.shape}");
 
-                        // Tensor ‚ğ RenderTexture ‚É•ÏŠ·
+                        // Tensor ã‚’ RenderTexture ã«å¤‰æ›
                         outputRendertexture = TextureConverter.ToTexture(outputTensor);
                         this.Debugmat.mainTexture = outputRendertexture;
                     }
