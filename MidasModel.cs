@@ -11,46 +11,24 @@ public class MidasModel : MonoBehaviour
     public RenderTexture outputTexture;
     public Material mat;
 
-    private Worker m_Worker;
-    private Model model;
 
    
         
     void Start()
     {
-        model = ModelLoader.Load(modelAsset);
-        m_Worker = new Worker(model, BackendType.GPUCompute);
+       
     }
 
     void Update()
     {
-        ProcessModel(inputtex);
+
     }
 
     void OnDisable()
     {
-        m_Worker.Dispose();
+  
     }
 
-    void ProcessModel(Texture2D inputtex)
-    {
-        Profiler.BeginSample("This is Midas Process");
-        using (Tensor<float> inputTensor = TextureConverter.ToTensor(inputtex, width: 256, height: 256, channels: 3))
-        {
-            m_Worker.Schedule(inputTensor);
-            using (Tensor<float> outputTensor = m_Worker.PeekOutput() as Tensor<float>)
-            {
-                if (outputTensor != null)
-                {
-                    outputTensor.Reshape(new TensorShape(1, outputTensor.shape[0], outputTensor.shape[1], outputTensor.shape[2]));
-                    Debug.Log(outputTensor.shape);
-                    RenderTexture outputRendertexture= TextureConverter.ToTexture(outputTensor);
-                    mat.mainTexture = outputRendertexture;
-                }
-            }
-        }
-        Profiler.EndSample();
-    }
     
 }
 public class MidasEstimation
@@ -58,15 +36,17 @@ public class MidasEstimation
     ModelAsset modelAsset;
     Worker m_Worker;
     Model model;
+    Material Debugmat;
 
-    public MidasEstimation(ModelAsset modelAsset)
+    public MidasEstimation(ModelAsset modelAsset,Material Debugmat)
     {
+        this.Debugmat = Debugmat;
         this.modelAsset = modelAsset;
         this.model = ModelLoader.Load(modelAsset);
         this.m_Worker = new Worker(model, BackendType.GPUCompute);
     }
 
-    public RenderTexture inference(Texture2D inputTexture)
+    public RenderTexture inference(RenderTexture inputTexture)
     {
         RenderTexture outputRendertexture = null; // 初期化
         try
@@ -74,7 +54,7 @@ public class MidasEstimation
             Profiler.BeginSample("This is Midas Process");
 
             // 入力テクスチャを Tensor に変換
-            using (Tensor<float> inputTensor = TextureConverter.ToTensor(inputTexture, width: 256, height: 256, channels: 3))
+            using (Tensor<float> inputTensor = TextureConverter.ToTensor(inputTexture, width: 1024, height: 512, channels: 3))
             {
                 // モデル推論のスケジューリング
                 m_Worker.Schedule(inputTensor);
@@ -85,11 +65,12 @@ public class MidasEstimation
                     if (outputTensor != null)
                     {
                         // 必要に応じて Tensor の形状を変更
-                        outputTensor.Reshape(new TensorShape(1, outputTensor.shape[0], outputTensor.shape[1], outputTensor.shape[2]));
+                        
                         Debug.Log($"Output Tensor Shape: {outputTensor.shape}");
 
                         // Tensor を RenderTexture に変換
                         outputRendertexture = TextureConverter.ToTexture(outputTensor);
+                        this.Debugmat.mainTexture = outputRendertexture;
                     }
                     else
                     {
