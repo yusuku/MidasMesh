@@ -45,26 +45,54 @@ public class MidasEstimation
     {
         this.modelAsset = modelAsset;
         this.model = ModelLoader.Load(modelAsset);
-        this.m_Worker = new Worker(model, BackendType.GPUCompute);
+        this.m_Worker = new Worker(this.model, BackendType.GPUCompute);
         this.width = model.inputs[0].shape.Get(3);
         this.height = model.inputs[0].shape.Get(2);
         Debug.Log("input width:  "+this.width+" input_height: "+ this.height);
         Debug.Log(model.inputs[0].shape);
         this.mat=Debugmat;
-        StandardizedModel(this.model);
+        
     }
 
-    private void  StandardizedModel(Model model)
+    // 2024/12/26 AI-Tag
+    // This was created with assistance from Muse, a Unity Artificial Intelligence product
+
+    private void StandardizedModel(Model model)
     {
         var graph = new FunctionalGraph();
         var inputs = graph.AddInputs(model);
         FunctionalTensor[] outputs = Functional.Forward(model, inputs);
-        FunctionalTensor maxout= Functional.ReduceMax(outputs[0],0);
-        FunctionalTensor minout = Functional.ReduceMin(outputs[0], 0);
-        var modelout=(outputs[0] - minout) / (maxout - minout);
-        this.model=graph.Compile(modelout);
-        Debug.Log(modelout);
+
+        // Ensure specifying the correct axis for ReduceMax and ReduceMin
+        int axis = 0; // Change this to the desired axis for normalization
+        FunctionalTensor maxout = Functional.ReduceMax(outputs[0], axis);
+        FunctionalTensor minout = Functional.ReduceMin(outputs[0], axis);
+
+        // Normalize the output
+        var modelout = (outputs[0] - minout) / (maxout - minout);
+        this.model = graph.Compile(modelout);
+
+        
         this.m_Worker = new Worker(this.model, BackendType.GPUCompute);
+    }
+
+    private Tensor<float> NormalizeTensor(Tensor<float> input)
+    {
+        var cpuTensor = input.ReadbackAndClone();
+        float max = float.MinValue;
+        float min = float.MaxValue;
+
+        for (int i = 0; i < cpuTensor.count; i++)
+        {
+            float value = cpuTensor[i];
+            if (value > max) max = value;
+            if (value < min) min = value;
+        }
+        for (int i = 0;i < cpuTensor.count; i++)
+        {
+            cpuTensor[i] = (cpuTensor[i] -min)/(max-min) ;
+        }
+        return cpuTensor;
     }
 
     public RenderTexture inference(Texture inputTexture)
@@ -98,9 +126,9 @@ public class MidasEstimation
                             outputTensor.Reshape(new TensorShape(1,1,outheight, outwidth));
                             Debug.Log($"Changed Output Tensor Shape: {outputTensor.shape}");
                         }
-                            
+                        
                         // Tensor ‚ð RenderTexture ‚É•ÏŠ·
-                        outputRendertexture = TextureConverter.ToTexture(outputTensor);
+                        outputRendertexture = TextureConverter.ToTexture(NormalizeTensor(outputTensor));
                         this.mat.mainTexture= outputRendertexture;
                     }
                     else

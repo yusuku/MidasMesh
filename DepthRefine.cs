@@ -15,8 +15,6 @@ public class DepthRefine : MonoBehaviour
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
-
-
         midas=new MidasEstimation(modelAsset,Debugmat);
         midas.inference(inputTexture);
     }
@@ -25,5 +23,9 @@ public class DepthRefine : MonoBehaviour
     void Update()
     {
         
+    }
+    private void OnDestroy()
+    {
+        midas.Release();
     }
 }
