@@ -5,23 +5,24 @@ using UnityEngine.Profiling;
 
 public class MidasModel : MonoBehaviour
 {
-    // ãƒ¢ãƒ‡ãƒ«ã¨ãƒ†ã‚¯ã‚¹ãƒãƒ£ã®é–¢é€£ãƒªã‚½ãƒ¼ã‚¹
+    // ƒ‚ƒfƒ‹‚ÆƒeƒNƒXƒ`ƒƒ‚ÌŠÖ˜AƒŠƒ\[ƒX
     public ModelAsset modelAsset;
     public RenderTexture inputtex;
-    public RenderTexture outputTexture;
-    public Material Debugmat;
+
+    public Material mat;
+
 
     MidasEstimation midas;
-   
-        
+
     void Start()
     {
-       midas=new MidasEstimation(modelAsset,Debugmat);
+        midas=new MidasEstimation(modelAsset, mat);
     }
 
     void Update()
     {
-        midas.inference(inputTexture);
+        midas.inference(inputtex);
+        
     }
 
     void OnDisable()
@@ -29,48 +30,78 @@ public class MidasModel : MonoBehaviour
         midas.Release();
     }
 
-    
+
 }
 public class MidasEstimation
 {
     ModelAsset modelAsset;
     Worker m_Worker;
     Model model;
-    Material Debugmat;
+    Material mat;
+
+    int width, height;
 
     public MidasEstimation(ModelAsset modelAsset,Material Debugmat)
     {
-        this.Debugmat = Debugmat;
         this.modelAsset = modelAsset;
         this.model = ModelLoader.Load(modelAsset);
         this.m_Worker = new Worker(model, BackendType.GPUCompute);
+        this.width = model.inputs[0].shape.Get(3);
+        this.height = model.inputs[0].shape.Get(2);
+        Debug.Log("input width:  "+this.width+" input_height: "+ this.height);
+        Debug.Log(model.inputs[0].shape);
+        this.mat=Debugmat;
+        StandardizedModel(this.model);
     }
 
-    public RenderTexture inference(RenderTexture inputTexture)
+    private void  StandardizedModel(Model model)
     {
-        RenderTexture outputRendertexture = null; // åˆæœŸåŒ–
+        var graph = new FunctionalGraph();
+        var inputs = graph.AddInputs(model);
+        FunctionalTensor[] outputs = Functional.Forward(model, inputs);
+        FunctionalTensor maxout= Functional.ReduceMax(outputs[0],0);
+        FunctionalTensor minout = Functional.ReduceMin(outputs[0], 0);
+        var modelout=(outputs[0] - minout) / (maxout - minout);
+        this.model=graph.Compile(modelout);
+        Debug.Log(modelout);
+        this.m_Worker = new Worker(this.model, BackendType.GPUCompute);
+    }
+
+    public RenderTexture inference(Texture inputTexture)
+    {
+        RenderTexture outputRendertexture = null; // ‰Šú‰»
         try
         {
             Profiler.BeginSample("This is Midas Process");
+            
+          
 
-            // å…¥åŠ›ãƒ†ã‚¯ã‚¹ãƒãƒ£ã‚’ Tensor ã«å¤‰æ›
-            using (Tensor<float> inputTensor = TextureConverter.ToTensor(inputTexture, width: 1024, height: 512, channels: 3))
+            // “ü—ÍƒeƒNƒXƒ`ƒƒ‚ğ Tensor ‚É•ÏŠ·
+            using (Tensor<float> inputTensor = TextureConverter.ToTensor(inputTexture,height: this.height, width: this.width, channels: 3))
             {
-                // ãƒ¢ãƒ‡ãƒ«æ¨è«–ã®ã‚¹ã‚±ã‚¸ãƒ¥ãƒ¼ãƒªãƒ³ã‚°
+                // ƒ‚ƒfƒ‹„˜_‚ÌƒXƒPƒWƒ…[ƒŠƒ“ƒO
                 m_Worker.Schedule(inputTensor);
 
-                // ãƒ¢ãƒ‡ãƒ«å‡ºåŠ›ã‚’å–å¾—
+                // ƒ‚ƒfƒ‹o—Í‚ğæ“¾
                 using (Tensor<float> outputTensor = m_Worker.PeekOutput() as Tensor<float>)
                 {
                     if (outputTensor != null)
                     {
-                        // å¿…è¦ã«å¿œã˜ã¦ Tensor ã®å½¢çŠ¶ã‚’å¤‰æ›´
-                        
+                        // •K—v‚É‰‚¶‚Ä Tensor ‚ÌŒ`ó‚ğ•ÏX
+                        //outputTensor.Reshape(new TensorShape(1, outputTensor.shape[0], outputTensor.shape[1], outputTensor.shape[2]));
                         Debug.Log($"Output Tensor Shape: {outputTensor.shape}");
-
-                        // Tensor ã‚’ RenderTexture ã«å¤‰æ›
+                        if (outputTensor.shape.rank != 2)
+                        {
+                            int size = outputTensor.shape.rank;
+                            int outwidth= outputTensor.shape[size-1];
+                            int outheight= outputTensor.shape[size-2];
+                            outputTensor.Reshape(new TensorShape(1,1,outheight, outwidth));
+                            Debug.Log($"Changed Output Tensor Shape: {outputTensor.shape}");
+                        }
+                            
+                        // Tensor ‚ğ RenderTexture ‚É•ÏŠ·
                         outputRendertexture = TextureConverter.ToTexture(outputTensor);
-                        this.Debugmat.mainTexture = outputRendertexture;
+                        this.mat.mainTexture= outputRendertexture;
                     }
                     else
                     {
