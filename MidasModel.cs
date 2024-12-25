@@ -118,7 +118,7 @@ public class MidasEstimation
                         // 必要に応じて Tensor の形状を変更
                         //outputTensor.Reshape(new TensorShape(1, outputTensor.shape[0], outputTensor.shape[1], outputTensor.shape[2]));
                         Debug.Log($"Output Tensor Shape: {outputTensor.shape}");
-                        if (outputTensor.shape.rank != 2)
+                        if (outputTensor.shape.rank <4)
                         {
                             int size = outputTensor.shape.rank;
                             int outwidth= outputTensor.shape[size-1];
@@ -126,10 +126,12 @@ public class MidasEstimation
                             outputTensor.Reshape(new TensorShape(1,1,outheight, outwidth));
                             Debug.Log($"Changed Output Tensor Shape: {outputTensor.shape}");
                         }
-                        
+
+                        Tensor<float> cpuoutput=NormalizeTensor(outputTensor);
                         // Tensor を RenderTexture に変換
-                        outputRendertexture = TextureConverter.ToTexture(NormalizeTensor(outputTensor));
+                        outputRendertexture = TextureConverter.ToTexture(cpuoutput);
                         this.mat.mainTexture= outputRendertexture;
+                        cpuoutput.Dispose();
                     }
                     else
                     {
