@@ -54,26 +54,17 @@ public class MidasEstimation
         
     }
 
-    // 2024/12/26 AI-Tag
-    // This was created with assistance from Muse, a Unity Artificial Intelligence product
-
-    private void StandardizedModel(Model model)
+    RenderTexture ResizeRenderTexture(RenderTexture source, int newWidth, int newHeight)
     {
-        var graph = new FunctionalGraph();
-        var inputs = graph.AddInputs(model);
-        FunctionalTensor[] outputs = Functional.Forward(model, inputs);
+        // 新しい RenderTexture を作成
+        RenderTexture newRenderTexture = new RenderTexture(newWidth, newHeight, source.depth, source.format);
+        newRenderTexture.enableRandomWrite = source.enableRandomWrite; // 必要なら設定
+        newRenderTexture.Create();
 
-        // Ensure specifying the correct axis for ReduceMax and ReduceMin
-        int axis = 0; // Change this to the desired axis for normalization
-        FunctionalTensor maxout = Functional.ReduceMax(outputs[0], axis);
-        FunctionalTensor minout = Functional.ReduceMin(outputs[0], axis);
+        // 古い RenderTexture の内容を新しい RenderTexture にコピー
+        Graphics.Blit(source, newRenderTexture);
 
-        // Normalize the output
-        var modelout = (outputs[0] - minout) / (maxout - minout);
-        this.model = graph.Compile(modelout);
-
-        
-        this.m_Worker = new Worker(this.model, BackendType.GPUCompute);
+        return newRenderTexture;
     }
 
     private Tensor<float> NormalizeTensor(Tensor<float> input)
@@ -130,6 +121,7 @@ public class MidasEstimation
                         Tensor<float> cpuoutput=NormalizeTensor(outputTensor);
                         // Tensor を RenderTexture に変換
                         outputRendertexture = TextureConverter.ToTexture(cpuoutput);
+                        outputRendertexture=ResizeRenderTexture(outputRendertexture, inputTexture.width, inputTexture.height);
                         this.mat.mainTexture= outputRendertexture;
                         cpuoutput.Dispose();
                     }

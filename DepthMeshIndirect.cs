@@ -27,7 +27,9 @@ public class DepthMeshIndirect : MonoBehaviour
     void Start()
     {
         midas = new MidasEstimation(modelAsset,Debugmat);
-        GPUInstancing = new TextureDepthGPUInstancing(Instancematerial, Instancemesh, InstanceShader, inputTexture);
+        outputTexture= midas.inference(inputTexture);
+        
+        GPUInstancing = new TextureDepthGPUInstancing(Instancematerial, Instancemesh, InstanceShader, inputTexture, outputTexture);
 
     }
 
@@ -50,8 +52,8 @@ public class TextureDepthGPUInstancing
     private readonly Mesh mesh; // 描画に使用するメッシュ
     private readonly ComputeShader computeShader;
 
-    private readonly RenderTexture diffuseMap; // 入力拡散テクスチャ
-    private RenderTexture Depthmap;
+    private readonly Texture diffuseMap; // 入力拡散テクスチャ
+    private Texture Depthmap;
 
     private GraphicsBuffer commandBuf;
     private GraphicsBuffer.IndirectDrawIndexedArgs[] commandData;
@@ -65,17 +67,17 @@ public class TextureDepthGPUInstancing
     private readonly uint xThread;
     private readonly uint yThread;
 
-    public TextureDepthGPUInstancing(Material material, Mesh mesh, ComputeShader computeShader, RenderTexture diffuseMap)
+    public TextureDepthGPUInstancing(Material material, Mesh mesh, ComputeShader computeShader, Texture diffuseMap,Texture Depthmap)
     {
         this.material = material ;
         this.mesh = mesh;
         this.computeShader = computeShader;
         this.diffuseMap = diffuseMap;
+        this.Depthmap = Depthmap;
 
         this.width = diffuseMap.width;
         this.height = diffuseMap.height;
-        Debug.Log(this.width);
-        Debug.Log(this.height);
+
         // コマンドバッファの初期化
         commandBuf = new GraphicsBuffer(GraphicsBuffer.Target.IndirectArguments, 1, GraphicsBuffer.IndirectDrawIndexedArgs.size);
         commandData = new GraphicsBuffer.IndirectDrawIndexedArgs[1]
@@ -98,14 +100,14 @@ public class TextureDepthGPUInstancing
         computeShader.SetInt("height", height);
         computeShader.GetKernelThreadGroupSizes(kernelId, out xThread, out yThread, out _);
         computeShader.SetTexture(kernelId, "DiffuseTexture", diffuseMap);
-
+        computeShader.SetTexture(kernelId, "DepthTexture", Depthmap);
         computeShader.SetBuffer(kernelId, "PositionResult", positionBuffer);
         computeShader.SetBuffer(kernelId, "ColorResult", colorBuffer);
         computeShader.Dispatch(kernelId, Mathf.CeilToInt(width / (float)xThread), Mathf.CeilToInt(height / (float)yThread), 1);
 
     }
 
-    public void DrawMeshes(RenderTexture depthmap)
+    public void DrawMeshes(Texture depthmap)
     {
         try
         {
